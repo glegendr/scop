@@ -3,7 +3,45 @@ extern crate glium;
 
 mod teapot;
 
-pub fn mult_m(a: [[f32; 4]; 4], b: &[[f32; 4]; 4], model_position: &[f32; 4]) -> [[f32; 4]; 4] {
+const VERTEX_SHADER: &str = r#"
+    #version 150
+
+    in vec3 position;
+    in vec3 normal;
+
+    out vec3 v_normal;
+
+    uniform mat4 perspective;
+    uniform mat4 view;
+    uniform mat4 model;
+    uniform mat4 transformmodel;
+
+    void main() {
+        mat4 modeltransformed = transformmodel * model;
+        mat4 modelview = view * modeltransformed;
+        v_normal = transpose(inverse(mat3(modelview))) * normal;
+        gl_Position = perspective * modelview * vec4(position, 1.0);
+    }
+"#;
+
+const FRAGMENT_SHADER: &str = r#"
+    #version 150
+
+    in vec3 v_normal;
+    out vec4 color;
+    uniform vec3 u_light;
+
+    void main() {
+        float brightness = dot(normalize(v_normal), normalize(u_light));
+        vec3 dark_color = vec3(0.0, 0.6, 0.0);
+        vec3 regular_color = vec3(0.0, 1.0, 0.0);
+        color = vec4(mix(dark_color, regular_color, brightness), 1.0);
+    }
+"#;
+
+type Matrix = [[f32; 4]; 4];
+
+pub fn mult_m(a: Matrix, b: Matrix) -> Matrix {
     let mut out = [
         [0., 0., 0., 0.],
         [0., 0., 0., 0.],
@@ -19,8 +57,43 @@ pub fn mult_m(a: [[f32; 4]; 4], b: &[[f32; 4]; 4], model_position: &[f32; 4]) ->
         }
     }
 
-    out[3] = *model_position;
     out
+}
+
+fn rotate_x(mat: Matrix, rot: f32) -> Matrix {
+    mult_m(
+        mat,
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [0.0, rot.cos(), -rot.sin(), 0.0],
+            [0.0, rot.sin(), rot.cos(), 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ],
+    )
+}
+
+fn rotate_y(mat: Matrix, rot: f32) -> Matrix {
+    mult_m(
+        mat,
+        [
+            [rot.cos(), 0.0, -rot.sin(), 0.0],
+            [0.0, 1.0, 0.0, 0.0],
+            [rot.sin(), 0.0, rot.cos(), 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ],
+    )
+}
+
+fn rotate_z(mat: Matrix, rot: f32) -> Matrix {
+    mult_m(
+        mat,
+        [
+            [rot.cos(), -rot.sin(), 0.0, 0.0],
+            [rot.sin(), rot.cos(), 0.0, 0.0],
+            [0.0, 0.0, 1.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ],
+    )
 }
 
 fn main() {
@@ -41,44 +114,9 @@ fn main() {
     )
     .unwrap();
 
-    let vertex_shader_src = r#"
-        #version 150
-
-        in vec3 position;
-        in vec3 normal;
-
-        out vec3 v_normal;
-
-        uniform mat4 perspective;
-        uniform mat4 view;
-        uniform mat4 model;
-        uniform mat4 transformmodel;
-
-        void main() {
-            mat4 modeltransformed = transformmodel * model;
-            mat4 modelview = view * modeltransformed;
-            v_normal = transpose(inverse(mat3(modelview))) * normal;
-            gl_Position = perspective * modelview * vec4(position, 1.0);
-        }
-    "#;
-
-    let fragment_shader_src = r#"
-        #version 150
-
-        in vec3 v_normal;
-        out vec4 color;
-        uniform vec3 u_light;
-
-        void main() {
-            float brightness = dot(normalize(v_normal), normalize(u_light));
-            vec3 dark_color = vec3(0.0, 0.6, 0.0);
-            vec3 regular_color = vec3(0.0, 1.0, 0.0);
-            color = vec4(mix(dark_color, regular_color, brightness), 1.0);
-        }
-    "#;
 
     let program =
-        glium::Program::from_source(&display, vertex_shader_src, fragment_shader_src, None)
+        glium::Program::from_source(&display, VERTEX_SHADER, FRAGMENT_SHADER, None)
             .unwrap();
 
     let mut rotations: (f32, usize, bool) = (0.0, 0, true);
@@ -87,12 +125,13 @@ fn main() {
     let mut last_mouse_position: [f64; 2] = [0.0, 0.0];
     let speed: f32 = 5.0;
 
-    let model = [
+    let model: Matrix = [
         [1.0, 0.0, 0.0, 0.0],
         [0.0, 1.0, 0.0, 0.0],
         [0.0, 0.0, 1.0, 0.0],
-        [0.0, 0.0, 0.0, 1.0f32],
+        [0.0, 0.0, 0.0, 1.0],
     ];
+    
 
     event_loop.run(move |event, _, control_flow| {
         let next_frame_time =
@@ -106,75 +145,17 @@ fn main() {
         let mut target = display.draw();
         target.clear_color_and_depth((0.0, 0.0, 1.0, 1.0), 1.0);
         let model_position = [object[0], object[1], object[2], 1.0f32];
-        let transformmodel = match rotations.1 {
-            0 => mult_m(model, &[
-                [rotations.0.cos(), 0.0, -rotations.0.sin(), 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [rotations.0.sin(), 0.0, rotations.0.cos(), 0.0],
-                [0.0, 0.0, 0.0, 0.0],
-            ], &model_position),
-            1 => mult_m(model, &[
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, rotations.0.cos(), -rotations.0.sin(), 0.0],
-                [0.0, rotations.0.sin(), rotations.0.cos(), 0.0],
-                [0.0, 0.0, 0.0, 0.0],
-            ], &model_position),
-            2 => mult_m(model, &[
-                [rotations.0.cos(), -rotations.0.sin(), 0.0, 0.0],
-                [rotations.0.sin(), rotations.0.cos(), 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0],
-            ], &model_position),
-            3 => mult_m([
-                    [rotations.0.cos(), 0.0, -rotations.0.sin(), 0.0],
-                    [0.0, 1.0, 0.0, 0.0],
-                    [rotations.0.sin(), 0.0, rotations.0.cos(), 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                ], &[
-                    [1.0, 0.0, 0.0, 0.0],
-                    [0.0, rotations.0.cos(), -rotations.0.sin(), 0.0],
-                    [0.0, rotations.0.sin(), rotations.0.cos(), 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                ], &model_position),
-            4 => mult_m([
-                    [rotations.0.cos(), 0.0, -rotations.0.sin(), 0.0],
-                    [0.0, 1.0, 0.0, 0.0],
-                    [rotations.0.sin(), 0.0, rotations.0.cos(), 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                ], &[
-                    [rotations.0.cos(), -rotations.0.sin(), 0.0, 0.0],
-                    [rotations.0.sin(), rotations.0.cos(), 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                ], &model_position),
-            5 => mult_m([
-                    [1.0, 0.0, 0.0, 0.0],
-                    [0.0, rotations.0.cos(), -rotations.0.sin(), 0.0],
-                    [0.0, rotations.0.sin(), rotations.0.cos(), 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                ], &[
-                    [rotations.0.cos(), -rotations.0.sin(), 0.0, 0.0],
-                    [rotations.0.sin(), rotations.0.cos(), 0.0, 0.0],
-                    [0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
-                ], &model_position),
-            _ => mult_m(mult_m([
-                [1.0, 0.0, 0.0, 0.0],
-                [0.0, rotations.0.cos(), -rotations.0.sin(), 0.0],
-                [0.0, rotations.0.sin(), rotations.0.cos(), 0.0],
-                [0.0, 0.0, 0.0, 0.0],
-            ], &[
-                [rotations.0.cos(), -rotations.0.sin(), 0.0, 0.0],
-                [rotations.0.sin(), rotations.0.cos(), 0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0],
-            ], &model_position), &[
-                [rotations.0.cos(), 0.0, -rotations.0.sin(), 0.0],
-                [0.0, 1.0, 0.0, 0.0],
-                [rotations.0.sin(), 0.0, rotations.0.cos(), 0.0],
-                [0.0, 0.0, 0.0, 0.0],
-            ], &model_position),
+        let mut transformmodel = match rotations.1 {
+            0 => rotate_y(model, rotations.0),
+            1 => rotate_x(model, rotations.0),
+            2 => rotate_z(model, rotations.0),
+            3 => rotate_x(rotate_y(model, rotations.0), rotations.0),
+            4 => rotate_z(rotate_y(model, rotations.0), rotations.0),
+            5 => rotate_z(rotate_x(model, rotations.0), rotations.0),
+            _ => rotate_y(rotate_z(rotate_x(model, rotations.0), rotations.0), rotations.0),
         };
+        transformmodel = mult_m(model, transformmodel);
+        transformmodel[3] = model_position;
 
         let view = view_matrix(&[player[0], player[1], player[2]], &[player[3], player[4], player[5]], &[0.0, 1.0, 0.0]);
 
@@ -248,13 +229,9 @@ fn main() {
                            glutin::event::VirtualKeyCode::S => player[2] -= speed,
                            // Center vision on object
                            glutin::event::VirtualKeyCode::C => {
-                            player[3] = player[0] - object[0];
-                            player[4] = player[1] - object[1];
-                            player[5] = if player[2] - object[2] < 0.0 {
-                                1.0
-                            } else {
-                                -1.0
-                            };
+                            player[3] = object[0] - player[0];
+                            player[4] = object[1] - player[1];
+                            player[5] = object[2] - player[2];
                            }
                            _ => return,
                         }
@@ -287,7 +264,7 @@ fn main() {
     });
 }
 
-fn view_matrix(position: &[f32; 3], direction: &[f32; 3], up: &[f32; 3]) -> [[f32; 4]; 4] {
+fn view_matrix(position: &[f32; 3], direction: &[f32; 3], up: &[f32; 3]) -> Matrix {
     let f = {
         let f = direction;
         let len = f[0] * f[0] + f[1] * f[1] + f[2] * f[2];
