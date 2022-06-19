@@ -30,12 +30,15 @@ const FRAGMENT_SHADER: &str = r#"
     in vec3 v_normal;
     out vec4 color;
     uniform vec3 u_light;
+    uniform vec3 u_color;
 
     void main() {
         float brightness = dot(normalize(v_normal), normalize(u_light));
-        vec3 dark_color = vec3(0.0, 0.6, 0.0);
-        vec3 regular_color = vec3(0.0, 1.0, 0.0);
-        color = vec4(mix(dark_color, regular_color, brightness), 1.0);
+        vec3 dark_color = u_color;
+        dark_color[0] = dark_color[0] - 0.4;
+        dark_color[1] = dark_color[1] - 0.4;
+        dark_color[2] = dark_color[2] - 0.4;
+        color = vec4(mix(dark_color, u_color, brightness), 1.0);
     }
 "#;
 
@@ -114,15 +117,14 @@ fn main() {
     )
     .unwrap();
 
-
     let program =
-        glium::Program::from_source(&display, VERTEX_SHADER, FRAGMENT_SHADER, None)
-            .unwrap();
+        glium::Program::from_source(&display, VERTEX_SHADER, FRAGMENT_SHADER, None).unwrap();
 
     let mut rotations: (f32, usize, bool) = (0.0, 0, true);
     let mut object: [f32; 3] = [0.0, 0.0, 250.0];
-    let mut player: [f32; 6] = [0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+    let mut player: [f32; 6] = [0.0, 0.0, 0.0, 0.0, 0.0, 250.0];
     let mut last_mouse_position: [f64; 2] = [0.0, 0.0];
+    let mut color: [f32; 3] = [1.0, 1.0, 1.0];
     let speed: f32 = 5.0;
 
     let model: Matrix = [
@@ -131,7 +133,6 @@ fn main() {
         [0.0, 0.0, 1.0, 0.0],
         [0.0, 0.0, 0.0, 1.0],
     ];
-    
 
     event_loop.run(move |event, _, control_flow| {
         let next_frame_time =
@@ -144,7 +145,6 @@ fn main() {
 
         let mut target = display.draw();
         target.clear_color_and_depth((0.0, 0.0, 1.0, 1.0), 1.0);
-        let model_position = [object[0], object[1], object[2], 1.0f32];
         let mut transformmodel = match rotations.1 {
             0 => rotate_y(model, rotations.0),
             1 => rotate_x(model, rotations.0),
@@ -154,8 +154,7 @@ fn main() {
             5 => rotate_z(rotate_x(model, rotations.0), rotations.0),
             _ => rotate_y(rotate_z(rotate_x(model, rotations.0), rotations.0), rotations.0),
         };
-        transformmodel = mult_m(model, transformmodel);
-        transformmodel[3] = model_position;
+        transformmodel[3] = [object[0], object[1], object[2], 1.0];
 
         let view = view_matrix(&[player[0], player[1], player[2]], &[player[3], player[4], player[5]], &[0.0, 1.0, 0.0]);
 
@@ -194,7 +193,7 @@ fn main() {
                 (&positions, &normals),
                 &indices,
                 &program,
-                &uniform! { model: model, view: view, perspective: perspective, u_light: light, transformmodel: transformmodel },
+                &uniform! { model: model, view: view, perspective: perspective, u_light: light, transformmodel: transformmodel, u_color: color },
                 &params,
             )
             .unwrap();
@@ -227,6 +226,25 @@ fn main() {
                            glutin::event::VirtualKeyCode::End => player[1] -= speed,
                            glutin::event::VirtualKeyCode::W => player[2] += speed,
                            glutin::event::VirtualKeyCode::S => player[2] -= speed,
+                           // Object Color
+                           glutin::event::VirtualKeyCode::Key1 => {
+                                color[0] += 0.1;
+                                if color[0] > 1.0 {
+                                    color[0] = 0.0;
+                                }
+                            }
+                            glutin::event::VirtualKeyCode::Key2 => {
+                                color[1] += 0.1;
+                                if color[1] > 1.0 {
+                                    color[1] = 0.0;
+                                }
+                            }
+                            glutin::event::VirtualKeyCode::Key3 => {
+                                color[2] += 0.1;
+                                if color[2] > 1.0 {
+                                    color[2] = 0.0;
+                                }
+                            }
                            // Center vision on object
                            glutin::event::VirtualKeyCode::C => {
                             player[3] = object[0] - player[0];
@@ -246,8 +264,13 @@ fn main() {
                             last_mouse_position[1] = y;
                             return ;
                         }
+                        let mult = if player[5] > 0.0 {
+                            -1.0
+                        } else {
+                            1.0
+                        };
                         player[3] -= (((last_mouse_position[0] - x) as f32) * speed / 1000.0) * player[5];
-                        player[4] += ((last_mouse_position[1] - y) as f32) * speed / 1000.0;
+                        player[4] -= (((last_mouse_position[1] - y) as f32) * speed / 1000.0) * player[5] * mult;
                         last_mouse_position[0] = x;
                         last_mouse_position[1] = y;
                     }
