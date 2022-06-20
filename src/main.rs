@@ -2,14 +2,15 @@
 extern crate glium;
 
 mod teapot;
+mod parsing;
+
+use std::{env, fs, process};
+use parsing::parsing;
 
 const VERTEX_SHADER: &str = r#"
     #version 150
 
     in vec3 position;
-    in vec3 normal;
-
-    out vec3 v_normal;
 
     uniform mat4 perspective;
     uniform mat4 view;
@@ -19,7 +20,6 @@ const VERTEX_SHADER: &str = r#"
     void main() {
         mat4 modeltransformed = transformmodel * model;
         mat4 modelview = view * modeltransformed;
-        v_normal = transpose(inverse(mat3(modelview))) * normal;
         gl_Position = perspective * modelview * vec4(position, 1.0);
     }
 "#;
@@ -27,18 +27,12 @@ const VERTEX_SHADER: &str = r#"
 const FRAGMENT_SHADER: &str = r#"
     #version 150
 
-    in vec3 v_normal;
     out vec4 color;
     uniform vec3 u_light;
     uniform vec3 u_color;
 
     void main() {
-        float brightness = dot(normalize(v_normal), normalize(u_light));
-        vec3 dark_color = u_color;
-        dark_color[0] = dark_color[0] - 0.4;
-        dark_color[1] = dark_color[1] - 0.4;
-        dark_color[2] = dark_color[2] - 0.4;
-        color = vec4(mix(dark_color, u_color, brightness), 1.0);
+        color = vec4(1.0, 0.2, 0.0, 1.0);
     }
 "#;
 
@@ -103,17 +97,28 @@ fn main() {
     #[allow(unused_imports)]
     use glium::{glutin, Surface};
 
+    let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        println!("add an obj file in argument");
+        process::exit(1);
+    }
+    let (vertices, indices);
+    match fs::read_to_string(args[1].clone()) {
+        Ok(contents) => (vertices, indices) = parsing(contents),
+        Err(_) => process::exit(1)
+    }
+    
     let event_loop = glutin::event_loop::EventLoop::new();
     let wb = glutin::window::WindowBuilder::new();
     let cb = glutin::ContextBuilder::new().with_depth_buffer(24);
     let display = glium::Display::new(wb, cb, &event_loop).unwrap();
 
-    let positions = glium::VertexBuffer::new(&display, &teapot::VERTICES).unwrap();
-    let normals = glium::VertexBuffer::new(&display, &teapot::NORMALS).unwrap();
+    let positions = glium::VertexBuffer::new(&display, &vertices).unwrap();
+    //let normals = glium::VertexBuffer::new(&display, &teapot::NORMALS).unwrap();
     let indices = glium::IndexBuffer::new(
         &display,
         glium::index::PrimitiveType::TrianglesList,
-        &teapot::INDICES,
+        &indices,
     )
     .unwrap();
 
@@ -190,7 +195,7 @@ fn main() {
 
         target
             .draw(
-                (&positions, &normals),
+                &positions,
                 &indices,
                 &program,
                 &uniform! { model: model, view: view, perspective: perspective, u_light: light, transformmodel: transformmodel, u_color: color },
