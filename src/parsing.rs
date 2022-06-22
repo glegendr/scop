@@ -12,7 +12,7 @@ pub struct Normal {
 
 implement_vertex!(Normal, normal);
 
-pub fn parsing(obj: String) -> (Vec<Vertex>, Vec<u16>) {
+pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<u16>), String> {
     let mut vertices = vec![Vertex {position: (0.0, 0.0, 0.0)}];
     let mut indices = Vec::new();
     let lines: Vec<&str> = obj.split('\n').collect();
@@ -21,8 +21,29 @@ pub fn parsing(obj: String) -> (Vec<Vertex>, Vec<u16>) {
             Some(c) => {
                 match c {
                     'v' => {
-                        let pos: Vec<&str> = line.split(' ').collect();
-                        vertices.push(Vertex {position: (pos[1].parse::<f32>().unwrap(), pos[2].parse::<f32>().unwrap(), pos[3].parse::<f32>().unwrap())});
+                        let pos: Vec<Option<f32>> = line.split(' ').map(|x| {
+                            match x.parse::<f32>() {
+                                Ok(res) => Some(res),
+                                Err(_) => None,
+                            }
+                        }).collect();
+                        if pos.len() == 4 {
+                            let mut i = 1;
+                            while i < pos.len() - 1 {
+                                match pos.get(i) {
+                                    Some(x) => {
+                                        if *x == None {
+                                            return Err("Vertex value must be float".to_string());
+                                        }
+                                    }
+                                    _ => ()
+                                }
+                                i += 1;
+                            }
+                            vertices.push(Vertex {position: (pos[1].unwrap(), pos[2].unwrap(), pos[3].unwrap())});
+                        } else {
+                            return Err("Your vertex must be composed of 3 points".to_string());
+                        }
                     },
                     'f' => {
                         for (i, x) in line.split(' ').collect::<Vec<&str>>().iter().enumerate() {
@@ -43,5 +64,5 @@ pub fn parsing(obj: String) -> (Vec<Vertex>, Vec<u16>) {
     }
     //println!("{:?}", vertices);
     //println!("{:?}", indices.len());
-    (vertices, indices)
+    Ok((vertices, indices))
 }

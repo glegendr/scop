@@ -104,8 +104,19 @@ fn main() {
     }
     let (vertices, indices);
     match fs::read_to_string(args[1].clone()) {
-        Ok(contents) => (vertices, indices) = parsing(contents),
-        Err(_) => process::exit(1)
+        Ok(contents) => {
+            match parsing(contents) {
+                Ok(x) => (vertices, indices) = x,
+                Err(e) => {
+                    println!("{e}");
+                    process::exit(1)
+                }
+            };
+        }
+        Err(_) => {
+            println!("Something went wrong when reading the file");
+            process::exit(1)
+        }
     }
     
     let event_loop = glutin::event_loop::EventLoop::new();
