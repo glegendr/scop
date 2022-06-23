@@ -47,9 +47,13 @@ pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<u16>), String> {
                     },
                     'f' => {
                         for (i, x) in line.split(' ').collect::<Vec<&str>>().iter().enumerate() {
-                            match x.parse::<u16>() {
-                                Ok(nb) => indices.push(nb),
-                                Err(_) => ()
+                            if i >= 1 {
+                                    match x.parse::<u16>() {
+                                        Ok(nb) => indices.push(nb),
+                                        Err(_) => {
+                                            return Err("indices value must be an u16 number".to_string())
+                                        }
+                                    }
                             }
                             if i == 3 {
                                 break;

@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate glium;
 
-mod teapot;
 mod parsing;
 
 use std::{env, fs, process};
@@ -11,6 +10,7 @@ const VERTEX_SHADER: &str = r#"
     #version 150
 
     in vec3 position;
+    out vec3 my_attr;
 
     uniform mat4 perspective;
     uniform mat4 view;
@@ -18,6 +18,7 @@ const VERTEX_SHADER: &str = r#"
     uniform mat4 transformmodel;
 
     void main() {
+        my_attr = position;
         mat4 modeltransformed = transformmodel * model;
         mat4 modelview = view * modeltransformed;
         gl_Position = perspective * modelview * vec4(position, 1.0);
@@ -27,12 +28,13 @@ const VERTEX_SHADER: &str = r#"
 const FRAGMENT_SHADER: &str = r#"
     #version 150
 
+    in vec3 my_attr;
     out vec4 color;
     uniform vec3 u_light;
     uniform vec3 u_color;
 
     void main() {
-        color = vec4(1.0, 0.2, 0.0, 1.0);
+        color = vec4(my_attr, 1.0);
     }
 "#;
 
@@ -140,7 +142,7 @@ fn main() {
     let mut object: [f32; 3] = [0.0, 0.0, 250.0];
     let mut player: [f32; 6] = [0.0, 0.0, 0.0, 0.0, 0.0, 250.0];
     let mut last_mouse_position: [f64; 2] = [0.0, 0.0];
-    let mut color: [f32; 3] = [1.0, 1.0, 1.0];
+    let mut color: [f32; 3] = [0.0, 0.0, 0.0];
     let speed: f32 = 5.0;
 
     let model: Matrix = [
@@ -223,6 +225,7 @@ fn main() {
                 }
                 glutin::event::WindowEvent::KeyboardInput { input, .. } => if let Some(key) = input.virtual_keycode {
                     if input.state == glutin::event::ElementState::Pressed {
+                            println!("{key:?}");
                         match key {
                            glutin::event::VirtualKeyCode::Escape => *control_flow = glutin::event_loop::ControlFlow::Exit,
                            // Object Rotation
