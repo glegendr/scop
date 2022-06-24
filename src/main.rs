@@ -1,16 +1,20 @@
 #[macro_use]
 extern crate glium;
+extern crate image;
 
 mod parsing;
 
 use std::{env, fs, process};
 use parsing::parsing;
+use std::io::Cursor;
 
 const VERTEX_SHADER: &str = r#"
     #version 150
 
     in vec3 position;
     out vec3 my_attr;
+    in vec2 tex_coords;
+    out vec2 v_tex_coords;
 
     uniform mat4 perspective;
     uniform mat4 view;
@@ -18,6 +22,7 @@ const VERTEX_SHADER: &str = r#"
     uniform mat4 transformmodel;
 
     void main() {
+        v_tex_coords = tex_coords;
         my_attr = position;
         mat4 modeltransformed = transformmodel * model;
         mat4 modelview = view * modeltransformed;
@@ -33,8 +38,12 @@ const FRAGMENT_SHADER: &str = r#"
     uniform vec3 u_light;
     uniform vec3 u_color;
 
+    in vec2 v_tex_coords;
+    uniform sampler2D tex;
+
     void main() {
-        color = vec4(my_attr, 1.0);
+        // color = vec4(gl_PrimitiveID, 1.0, 1.0, 1.0);
+        color = texture(tex, v_tex_coords);
     }
 "#;
 
@@ -104,22 +113,21 @@ fn main() {
         println!("add an obj file in argument");
         process::exit(1);
     }
-    let (vertices, indices);
-    match fs::read_to_string(args[1].clone()) {
+    let (vertices, indices) = match fs::read_to_string(args[1].clone()) {
         Ok(contents) => {
             match parsing(contents) {
-                Ok(x) => (vertices, indices) = x,
+                Ok(x) => x,
                 Err(e) => {
                     println!("{e}");
                     process::exit(1)
                 }
-            };
+            }
         }
         Err(_) => {
             println!("Something went wrong when reading the file");
             process::exit(1)
         }
-    }
+    };
     
     let event_loop = glutin::event_loop::EventLoop::new();
     let wb = glutin::window::WindowBuilder::new();
@@ -138,18 +146,30 @@ fn main() {
     let program =
         glium::Program::from_source(&display, VERTEX_SHADER, FRAGMENT_SHADER, None).unwrap();
 
+    let image = match image::load(Cursor::new(&include_bytes!("../resources/kitten.png")),
+        image::ImageFormat::Png) {
+            Err(_) => {
+                println!("Error parsing texture");
+                process::exit(1)
+            },
+            Ok(img) => img.to_rgba8()
+        };
+    let image_dimensions = image.dimensions();
+    let image = glium::texture::RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dimensions);
+    let texture = glium::texture::SrgbTexture2d::new(&display, image).unwrap(); 
+
     let mut rotations: (f32, usize, bool) = (0.0, 0, true);
-    let mut object: [f32; 3] = [0.0, 0.0, 250.0];
-    let mut player: [f32; 6] = [0.0, 0.0, 0.0, 0.0, 0.0, 250.0];
+    let mut object: [f32; 3] = [0.0, 0.0, 2.5];
+    let mut player: [f32; 6] = [0.0, 0.0, 0.0, 0.0, 0.0, 2.5];
     let mut last_mouse_position: [f64; 2] = [0.0, 0.0];
     let mut color: [f32; 3] = [0.0, 0.0, 0.0];
-    let speed: f32 = 5.0;
+    let speed: f32 = 0.05;
 
     let model: Matrix = [
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [0.0, 0.0, 0.0, 1.0],
+        [0.1, 0.0, 0.0, 0.0],
+        [0.0, 0.1, 0.0, 0.0],
+        [0.0, 0.0, 0.1, 0.0],
+        [0.0, 0.0, 0.0, 0.1],
     ];
 
     event_loop.run(move |event, _, control_flow| {
@@ -158,7 +178,7 @@ fn main() {
         *control_flow = glutin::event_loop::ControlFlow::WaitUntil(next_frame_time);
 
         if rotations.2 {
-            rotations.0 += 0.001;
+            rotations.0 += 0.005;
         }
 
         let mut target = display.draw();
@@ -211,7 +231,7 @@ fn main() {
                 &positions,
                 &indices,
                 &program,
-                &uniform! { model: model, view: view, perspective: perspective, u_light: light, transformmodel: transformmodel, u_color: color },
+                &uniform! { model: model, view: view, perspective: perspective, u_light: light, transformmodel: transformmodel, u_color: color, tex: &texture },
                 &params,
             )
             .unwrap();
@@ -225,7 +245,6 @@ fn main() {
                 }
                 glutin::event::WindowEvent::KeyboardInput { input, .. } => if let Some(key) = input.virtual_keycode {
                     if input.state == glutin::event::ElementState::Pressed {
-                            println!("{key:?}");
                         match key {
                            glutin::event::VirtualKeyCode::Escape => *control_flow = glutin::event_loop::ControlFlow::Exit,
                            // Object Rotation
@@ -288,8 +307,8 @@ fn main() {
                         } else {
                             1.0
                         };
-                        player[3] -= (((last_mouse_position[0] - x) as f32) * speed / 1000.0) * player[5];
-                        player[4] -= (((last_mouse_position[1] - y) as f32) * speed / 1000.0) * player[5] * mult;
+                        player[3] -= (((last_mouse_position[0] - x) as f32) * speed / 100.0) * player[5];
+                        player[4] -= (((last_mouse_position[1] - y) as f32) * speed / 100.0) * player[5] * mult;
                         last_mouse_position[0] = x;
                         last_mouse_position[1] = y;
                     }
