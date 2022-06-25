@@ -21,7 +21,7 @@ pub struct Vertex {
 
 implement_vertex!(Vertex, position, tex_coords);
 
-pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<u16>), String> {
+pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<u16>, [f32; 3]), String> {
     let mut vertices = vec![Vertex {position: (0.0, 0.0, 0.0), tex_coords: [0.0, 0.0]}];
     let mut indices = Vec::new();
     let lines: Vec<&str> = obj.split('\n').collect();
@@ -84,6 +84,18 @@ pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<u16>), String> {
     let size_x = image_bounds[2] - image_bounds[0];
     let size_y = image_bounds[1] - image_bounds[3];
     let size_z = image_bounds[5] - image_bounds[4];
+    let mut center = [0., 0., 0.];
+    if let Some(fst) = vertices.pop() {
+        println!("FST:    {fst:?}");
+        center = [size_x / 2.0 - fst.position.0.abs(), size_y / 2.0 - fst.position.1.abs(), size_z / 2.0 - fst.position.2.abs()];
+        println!("CENTER: {center:?}");
+        println!("SIZE X: {size_x}");
+        println!("SIZE Y: {size_y}");
+        println!("SIZE Z: {size_z}");
+        vertices.push(fst);
+    }
+     
+    [0, 3, 5];
 
 
     vertices.iter_mut().for_each(|v| {
@@ -102,5 +114,5 @@ pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<u16>), String> {
         };
         v.tex_coords = [t_x, t_y];
     });
-    Ok((vertices, indices))
+    Ok((vertices, indices, center))
 }

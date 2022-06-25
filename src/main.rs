@@ -1,11 +1,14 @@
 #[macro_use]
 extern crate glium;
 extern crate image;
+extern crate glam;
 
 mod parsing;
+mod matrix;
 
 use std::{env, fs, process};
 use parsing::parsing;
+use matrix::Matrix;
 use std::io::Cursor;
 
 const VERTEX_SHADER: &str = r#"
@@ -19,13 +22,12 @@ const VERTEX_SHADER: &str = r#"
     uniform mat4 perspective;
     uniform mat4 view;
     uniform mat4 model;
-    uniform mat4 transformmodel;
 
     void main() {
         v_tex_coords = tex_coords;
         my_attr = position;
-        mat4 modeltransformed = transformmodel * model;
-        mat4 modelview = view * modeltransformed;
+        // mat4 modeltransformed = transformmodel * ;
+        mat4 modelview = view * model;
         gl_Position = perspective * modelview * vec4(position, 1.0);
     }
 "#;
@@ -47,63 +49,6 @@ const FRAGMENT_SHADER: &str = r#"
     }
 "#;
 
-type Matrix = [[f32; 4]; 4];
-
-pub fn mult_m(a: Matrix, b: Matrix) -> Matrix {
-    let mut out = [
-        [0., 0., 0., 0.],
-        [0., 0., 0., 0.],
-        [0., 0., 0., 0.],
-        [0., 0., 0., 0.],
-    ];
-
-    for i in 0..4 {
-        for j in 0..4 {
-            for k in 0..4 {
-                out[i][j] += a[i][k] * b[k][j];
-            }
-        }
-    }
-
-    out
-}
-
-fn rotate_x(mat: Matrix, rot: f32) -> Matrix {
-    mult_m(
-        mat,
-        [
-            [1.0, 0.0, 0.0, 0.0],
-            [0.0, rot.cos(), -rot.sin(), 0.0],
-            [0.0, rot.sin(), rot.cos(), 0.0],
-            [0.0, 0.0, 0.0, 0.0],
-        ],
-    )
-}
-
-fn rotate_y(mat: Matrix, rot: f32) -> Matrix {
-    mult_m(
-        mat,
-        [
-            [rot.cos(), 0.0, -rot.sin(), 0.0],
-            [0.0, 1.0, 0.0, 0.0],
-            [rot.sin(), 0.0, rot.cos(), 0.0],
-            [0.0, 0.0, 0.0, 0.0],
-        ],
-    )
-}
-
-fn rotate_z(mat: Matrix, rot: f32) -> Matrix {
-    mult_m(
-        mat,
-        [
-            [rot.cos(), -rot.sin(), 0.0, 0.0],
-            [rot.sin(), rot.cos(), 0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [0.0, 0.0, 0.0, 0.0],
-        ],
-    )
-}
-
 fn main() {
     #[allow(unused_imports)]
     use glium::{glutin, Surface};
@@ -113,7 +58,7 @@ fn main() {
         println!("add an obj file in argument");
         process::exit(1);
     }
-    let (vertices, indices) = match fs::read_to_string(args[1].clone()) {
+    let (vertices, indices, mut center) = match fs::read_to_string(args[1].clone()) {
         Ok(contents) => {
             match parsing(contents) {
                 Ok(x) => x,
@@ -165,7 +110,7 @@ fn main() {
     let mut color: [f32; 3] = [0.0, 0.0, 0.0];
     let speed: f32 = 0.05;
 
-    let model: Matrix = [
+    let model: [[f32; 4]; 4] = [
         [0.1, 0.0, 0.0, 0.0],
         [0.0, 0.1, 0.0, 0.0],
         [0.0, 0.0, 0.1, 0.0],
@@ -183,16 +128,16 @@ fn main() {
 
         let mut target = display.draw();
         target.clear_color_and_depth((0.0, 0.0, 1.0, 1.0), 1.0);
-        let mut transformmodel = match rotations.1 {
-            0 => rotate_y(model, rotations.0),
-            1 => rotate_x(model, rotations.0),
-            2 => rotate_z(model, rotations.0),
-            3 => rotate_x(rotate_y(model, rotations.0), rotations.0),
-            4 => rotate_z(rotate_y(model, rotations.0), rotations.0),
-            5 => rotate_z(rotate_x(model, rotations.0), rotations.0),
-            _ => rotate_y(rotate_z(rotate_x(model, rotations.0), rotations.0), rotations.0),
-        };
-        transformmodel[3] = [object[0], object[1], object[2], 1.0];
+        // let mut transformmodel = match rotations.1 {
+        //     0 => rotate_y(model, rotations.0),
+        //     1 => rotate_x(model, rotations.0),
+        //     2 => rotate_z(model, rotations.0),
+        //     3 => rotate_x(rotate_y(model, rotations.0), rotations.0),
+        //     4 => rotate_z(rotate_y(model, rotations.0), rotations.0),
+        //     5 => rotate_z(rotate_x(model, rotations.0), rotations.0),
+        //     _ => rotate_y(rotate_z(rotate_x(model, rotations.0), rotations.0), rotations.0),
+        // };
+        // transformmodel[3] = [object[0], object[1], object[2], 1.0];
 
         let view = view_matrix(&[player[0], player[1], player[2]], &[player[3], player[4], player[5]], &[0.0, 1.0, 0.0]);
 
@@ -214,6 +159,15 @@ fn main() {
             ]
         };
 
+        // let m = glam::f32::Mat4::from_rotation_x(rotations.0);
+        // let m = Matrix::from_rotation_x(rotations.0);//.multiply(&Matrix::from_rotation_y(rotations.0));
+        // center[2] = -1.0;
+        // center[1] = -1.0;
+        // center[0] = 1.0;
+        let m = Matrix::from_translation([center[0], center[1], -center[2]])
+            .multiply(&Matrix::from_rotation_y(rotations.0))
+            .multiply(&Matrix::from_translation([-center[0], -center[1], center[2]]))
+            ;
         let light = [-1.0, 0.4, 0.9f32];
 
         let params = glium::DrawParameters {
@@ -231,7 +185,7 @@ fn main() {
                 &positions,
                 &indices,
                 &program,
-                &uniform! { model: model, view: view, perspective: perspective, u_light: light, transformmodel: transformmodel, u_color: color, tex: &texture },
+                &uniform! { model: m.to_cols_array_2d(), view: view, perspective: perspective, u_light: light, u_color: color, tex: &texture },
                 &params,
             )
             .unwrap();
@@ -325,7 +279,7 @@ fn main() {
     });
 }
 
-fn view_matrix(position: &[f32; 3], direction: &[f32; 3], up: &[f32; 3]) -> Matrix {
+fn view_matrix(position: &[f32; 3], direction: &[f32; 3], up: &[f32; 3]) -> [[f32; 4]; 4] {
     let f = {
         let f = direction;
         let len = f[0] * f[0] + f[1] * f[1] + f[2] * f[2];
