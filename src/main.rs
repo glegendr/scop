@@ -39,13 +39,18 @@ const FRAGMENT_SHADER: &str = r#"
     out vec4 color;
     uniform vec3 u_light;
     uniform vec3 u_color;
+    uniform bool is_textured;
 
     in vec2 v_tex_coords;
     uniform sampler2D tex;
 
     void main() {
-        // color = vec4(gl_PrimitiveID, 1.0, 1.0, 1.0);
-        color = texture(tex, v_tex_coords);
+        if (is_textured) {
+            color = texture(tex, v_tex_coords);
+        } else {
+            float grey = (float((gl_PrimitiveID) % 5) / 10.) * 0.4 + 0.02;
+            color = vec4(grey, grey, grey, 1.0);
+        }
     }
 "#;
 
@@ -108,6 +113,7 @@ fn main() {
     let mut player: [f32; 6] = [0.0, 0.0, -5., 0.0, 0.0, 1.];
     let mut last_mouse_position: [f64; 2] = [0.0, 0.0];
     let mut color: [f32; 3] = [0.0, 0.0, 0.0];
+    let mut is_textured: bool = false;
     let speed: f32 = 0.05;
 
     event_loop.run(move |event, _, control_flow| {
@@ -176,7 +182,15 @@ fn main() {
                 &positions,
                 &indices,
                 &program,
-                &uniform! { model: m.to_cols_array_2d(), view: view, perspective: perspective, u_light: light, u_color: color, tex: &texture },
+                &uniform! {
+                    model: m.to_cols_array_2d(),
+                    view: view,
+                    perspective: perspective,
+                    u_light: light,
+                    u_color: color,
+                    tex: &texture,
+                    is_textured: is_textured,
+                },
                 &params,
             )
             .unwrap();
@@ -209,6 +223,8 @@ fn main() {
                             glutin::event::VirtualKeyCode::End => player[1] -= speed,
                             glutin::event::VirtualKeyCode::W => player[2] += speed,
                             glutin::event::VirtualKeyCode::S => player[2] -= speed,
+                            // disable/enable textures
+                            glutin::event::VirtualKeyCode::T => is_textured = !is_textured,
                             // change object type
                             glutin::event::VirtualKeyCode::O => {
                                 indices = match indices.get_primitives_type() {
