@@ -58,7 +58,7 @@ fn main() {
         println!("add an obj file in argument");
         process::exit(1);
     }
-    let (vertices, indices, mut center) = match fs::read_to_string(args[1].clone()) {
+    let (vertices, indices, center) = match fs::read_to_string(args[1].clone()) {
         Ok(contents) => {
             match parsing(contents) {
                 Ok(x) => x,
@@ -73,7 +73,7 @@ fn main() {
             process::exit(1)
         }
     };
-    
+
     let event_loop = glutin::event_loop::EventLoop::new();
     let wb = glutin::window::WindowBuilder::new();
     let cb = glutin::ContextBuilder::new().with_depth_buffer(24);
@@ -110,13 +110,6 @@ fn main() {
     let mut color: [f32; 3] = [0.0, 0.0, 0.0];
     let speed: f32 = 0.05;
 
-    let model: [[f32; 4]; 4] = [
-        [0.1, 0.0, 0.0, 0.0],
-        [0.0, 0.1, 0.0, 0.0],
-        [0.0, 0.0, 0.1, 0.0],
-        [0.0, 0.0, 0.0, 0.1],
-    ];
-
     event_loop.run(move |event, _, control_flow| {
         let next_frame_time =
             std::time::Instant::now() + std::time::Duration::from_nanos(16_666_667);
@@ -128,16 +121,24 @@ fn main() {
 
         let mut target = display.draw();
         target.clear_color_and_depth((0.0, 0.0, 1.0, 1.0), 1.0);
-        // let mut transformmodel = match rotations.1 {
-        //     0 => rotate_y(model, rotations.0),
-        //     1 => rotate_x(model, rotations.0),
-        //     2 => rotate_z(model, rotations.0),
-        //     3 => rotate_x(rotate_y(model, rotations.0), rotations.0),
-        //     4 => rotate_z(rotate_y(model, rotations.0), rotations.0),
-        //     5 => rotate_z(rotate_x(model, rotations.0), rotations.0),
-        //     _ => rotate_y(rotate_z(rotate_x(model, rotations.0), rotations.0), rotations.0),
-        // };
-        // transformmodel[3] = [object[0], object[1], object[2], 1.0];
+
+        let mut m = Matrix::from_translation([-center[0], -center[1], -center[2]]);
+        m  = match rotations.1 {
+            0 => m.multiply(&Matrix::from_rotation_y(rotations.0)),
+            1 => m.multiply(&Matrix::from_rotation_x(rotations.0)),
+            2 => m.multiply(&Matrix::from_rotation_z(rotations.0)),
+            3 => m.multiply(&Matrix::from_rotation_x(rotations.0))
+                    .multiply(&Matrix::from_rotation_y(rotations.0)),
+            4 => m.multiply(&Matrix::from_rotation_z(rotations.0))
+                    .multiply(&Matrix::from_rotation_y(rotations.0)),
+            5 => m.multiply(&Matrix::from_rotation_z(rotations.0))
+                    .multiply(&Matrix::from_rotation_x(rotations.0)),
+            _ => m.multiply(&Matrix::from_rotation_y(rotations.0))
+                    .multiply(&Matrix::from_rotation_x(rotations.0))
+                    .multiply(&Matrix::from_rotation_z(rotations.0)),
+        };
+        m.multiply(&Matrix::from_translation(center));
+        m.set_w([object[0], object[1], object[2]]);
 
         let view = view_matrix(&[player[0], player[1], player[2]], &[player[3], player[4], player[5]], &[0.0, 1.0, 0.0]);
 
@@ -158,16 +159,6 @@ fn main() {
                 [0.0, 0.0, -(2.0 * zfar * znear) / (zfar - znear), 0.0],
             ]
         };
-
-        // let m = glam::f32::Mat4::from_rotation_x(rotations.0);
-        // let m = Matrix::from_rotation_x(rotations.0);//.multiply(&Matrix::from_rotation_y(rotations.0));
-        // center[2] = -1.0;
-        // center[1] = -1.0;
-        // center[0] = 1.0;
-        let m = Matrix::from_translation([center[0], center[1], -center[2]])
-            .multiply(&Matrix::from_rotation_y(rotations.0))
-            .multiply(&Matrix::from_translation([-center[0], -center[1], center[2]]))
-            ;
         let light = [-1.0, 0.4, 0.9f32];
 
         let params = glium::DrawParameters {
@@ -200,26 +191,26 @@ fn main() {
                 glutin::event::WindowEvent::KeyboardInput { input, .. } => if let Some(key) = input.virtual_keycode {
                     if input.state == glutin::event::ElementState::Pressed {
                         match key {
-                           glutin::event::VirtualKeyCode::Escape => *control_flow = glutin::event_loop::ControlFlow::Exit,
-                           // Object Rotation
-                           glutin::event::VirtualKeyCode::R => rotations.1 = (rotations.1 + 1) % 7,
-                           glutin::event::VirtualKeyCode::Space => rotations.2 = !rotations.2,
-                           // Object Translation
-                           glutin::event::VirtualKeyCode::Right => object[0] += speed,
-                           glutin::event::VirtualKeyCode::Left => object[0] -= speed,
-                           glutin::event::VirtualKeyCode::PageUp => object[1] += speed,
-                           glutin::event::VirtualKeyCode::PageDown => object[1] -= speed,
-                           glutin::event::VirtualKeyCode::Up => object[2] += speed,
-                           glutin::event::VirtualKeyCode::Down => object[2] -= speed,
-                           // Player Translation
-                           glutin::event::VirtualKeyCode::D => player[0] += speed,
-                           glutin::event::VirtualKeyCode::A => player[0] -= speed,
-                           glutin::event::VirtualKeyCode::Home => player[1] += speed,
-                           glutin::event::VirtualKeyCode::End => player[1] -= speed,
-                           glutin::event::VirtualKeyCode::W => player[2] += speed,
-                           glutin::event::VirtualKeyCode::S => player[2] -= speed,
-                           // Object Color
-                           glutin::event::VirtualKeyCode::Key1 => {
+                            glutin::event::VirtualKeyCode::Escape => *control_flow = glutin::event_loop::ControlFlow::Exit,
+                            // Object Rotation
+                            glutin::event::VirtualKeyCode::R => rotations.1 = (rotations.1 + 1) % 7,
+                            glutin::event::VirtualKeyCode::Space => rotations.2 = !rotations.2,
+                            // Object Translation
+                            glutin::event::VirtualKeyCode::Right => object[0] += speed,
+                            glutin::event::VirtualKeyCode::Left => object[0] -= speed,
+                            glutin::event::VirtualKeyCode::PageUp => object[1] += speed,
+                            glutin::event::VirtualKeyCode::PageDown => object[1] -= speed,
+                            glutin::event::VirtualKeyCode::Up => object[2] += speed,
+                            glutin::event::VirtualKeyCode::Down => object[2] -= speed,
+                            // Player Translation
+                            glutin::event::VirtualKeyCode::D => player[0] += speed,
+                            glutin::event::VirtualKeyCode::A => player[0] -= speed,
+                            glutin::event::VirtualKeyCode::Home => player[1] += speed,
+                            glutin::event::VirtualKeyCode::End => player[1] -= speed,
+                            glutin::event::VirtualKeyCode::W => player[2] += speed,
+                            glutin::event::VirtualKeyCode::S => player[2] -= speed,
+                            // Object Color
+                            glutin::event::VirtualKeyCode::Key1 => {
                                 color[0] += 0.1;
                                 if color[0] > 1.0 {
                                     color[0] = 0.0;
@@ -238,12 +229,12 @@ fn main() {
                                 }
                             }
                            // Center vision on object
-                           glutin::event::VirtualKeyCode::C => {
-                            player[3] = object[0] - player[0];
-                            player[4] = object[1] - player[1];
-                            player[5] = object[2] - player[2];
-                           }
-                           _ => return,
+                            glutin::event::VirtualKeyCode::C => {
+                                player[3] = object[0] - player[0];
+                                player[4] = object[1] - player[1];
+                                player[5] = object[2] - player[2];
+                            }
+                            _ => return,
                         }
 
                     }

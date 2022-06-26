@@ -15,7 +15,7 @@ fn min(a: f32, b:f32) -> f32 {
 
 #[derive(Copy, Clone, Debug)]
 pub struct Vertex {
-    position: (f32, f32, f32),
+    pub position: (f32, f32, f32),
     tex_coords: [f32; 2],
 }
 
@@ -80,39 +80,33 @@ pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<u16>, [f32; 3]), String>
             None => ()
         }
     }
-    let image_bounds = vertices.iter().fold([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], |acc, v| [min(acc[0], v.position.0), max(acc[1], v.position.1), max(acc[2], v.position.0), min(acc[3], v.position.1), min(acc[4], v.position.2), max(acc[5], v.position.2)]);
-    let size_x = image_bounds[2] - image_bounds[0];
-    let size_y = image_bounds[1] - image_bounds[3];
-    let size_z = image_bounds[5] - image_bounds[4];
+    let mut iter = vertices.iter();
+    iter.next();
     let mut center = [0., 0., 0.];
-    if let Some(fst) = vertices.pop() {
-        println!("FST:    {fst:?}");
-        center = [size_x / 2.0 - fst.position.0.abs(), size_y / 2.0 - fst.position.1.abs(), size_z / 2.0 - fst.position.2.abs()];
-        println!("CENTER: {center:?}");
-        println!("SIZE X: {size_x}");
-        println!("SIZE Y: {size_y}");
-        println!("SIZE Z: {size_z}");
-        vertices.push(fst);
+    if let Some(fst) = iter.next() {
+        let image_bounds = iter.fold([fst.position.0, fst.position.1, fst.position.0, fst.position.1, fst.position.2, fst.position.2], |acc, v| [min(acc[0], v.position.0), max(acc[1], v.position.1), max(acc[2], v.position.0), min(acc[3], v.position.1), min(acc[4], v.position.2), max(acc[5], v.position.2)]);
+        let size_x = image_bounds[2] - image_bounds[0];
+        let size_y = image_bounds[1] - image_bounds[3];
+        let size_z = image_bounds[5] - image_bounds[4];
+        center = [size_x / 2.0 + image_bounds[0], size_y / 2.0 + image_bounds[3], size_z / 2.0 + image_bounds[4]];
+
+        vertices.iter_mut().for_each(|v| {
+            let t_x = (v.position.0 + image_bounds[0].abs()) / (image_bounds[2] + image_bounds[0].abs());
+            let t_y = (v.position.1 + image_bounds[3].abs()) / (image_bounds[1] + image_bounds[3].abs());
+            let t_z = (v.position.2 + image_bounds[4].abs()) / (image_bounds[5] + image_bounds[4].abs());
+            v.tex_coords = match size_x > size_y {
+                true => match size_z > size_y {
+                    true => [t_x, t_z],
+                    false => [t_x, t_y],
+                },
+                false => match size_z > size_x {
+                    true => [t_y, t_z],
+                    false => [t_y, t_x]
+                }
+            };
+            v.tex_coords = [t_x, t_y];
+        });
+
     }
-     
-    [0, 3, 5];
-
-
-    vertices.iter_mut().for_each(|v| {
-        let t_x = (v.position.0 + image_bounds[0].abs()) / (image_bounds[2] + image_bounds[0].abs());
-        let t_y = (v.position.1 + image_bounds[3].abs()) / (image_bounds[1] + image_bounds[3].abs());
-        let t_z = (v.position.2 + image_bounds[4].abs()) / (image_bounds[5] + image_bounds[4].abs());
-        v.tex_coords = match size_x > size_y {
-            true => match size_z > size_y {
-                true => [t_x, t_z],
-                false => [t_x, t_y],
-            },
-            false => match size_z > size_x {
-                true => [t_y, t_z],
-                false => [t_y, t_x]
-            }
-        };
-        v.tex_coords = [t_x, t_y];
-    });
     Ok((vertices, indices, center))
 }

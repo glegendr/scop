@@ -1,6 +1,3 @@
-use core::iter::{Product, Sum};
-use std::ops::Mul;
-
 #[derive(Debug)]
 pub struct Matrix {
     x: [f32; 4],
@@ -89,13 +86,8 @@ impl Matrix {
             ],
         }
     }
-}
 
-impl<'a> Product<&'a Self> for Matrix {
-    fn product<I>(iter: I) -> Self
-    where
-        I: Iterator<Item = &'a Self>,
-    {
-        iter.fold(Self::default(), |a, b| Self::multiply(&a, &b))
+    pub fn set_w(&mut self, to: [f32; 3]) {
+        self.w = [to[0], to[1], to[2], 1.];
     }
 }
