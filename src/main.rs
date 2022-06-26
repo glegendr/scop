@@ -56,7 +56,7 @@ const FRAGMENT_SHADER: &str = r#"
 
 fn main() {
     #[allow(unused_imports)]
-    use glium::{glutin, Surface};
+    use glium::{glutin, Surface, glutin::event::VirtualKeyCode};
 
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -114,7 +114,7 @@ fn main() {
     let mut last_mouse_position: [f64; 2] = [0.0, 0.0];
     let mut color: [f32; 3] = [0.0, 0.0, 0.0];
     let mut is_textured: bool = false;
-    let speed: f32 = 0.05;
+    let mut speed: f32 = 0.05;
 
     event_loop.run(move |event, _, control_flow| {
         let next_frame_time =
@@ -129,7 +129,7 @@ fn main() {
         target.clear_color_and_depth((0.0, 0.0, 1.0, 1.0), 1.0);
 
         let mut m = Matrix::from_translation([-center[0], -center[1], -center[2]]);
-        m  = match rotations.1 {
+        m = match rotations.1 {
             0 => m.multiply(&Matrix::from_rotation_y(rotations.0)),
             1 => m.multiply(&Matrix::from_rotation_x(rotations.0)),
             2 => m.multiply(&Matrix::from_rotation_z(rotations.0)),
@@ -205,28 +205,39 @@ fn main() {
                 glutin::event::WindowEvent::KeyboardInput { input, .. } => if let Some(key) = input.virtual_keycode {
                     if input.state == glutin::event::ElementState::Pressed {
                         match key {
-                            glutin::event::VirtualKeyCode::Escape => *control_flow = glutin::event_loop::ControlFlow::Exit,
+                            VirtualKeyCode::Escape => *control_flow = glutin::event_loop::ControlFlow::Exit,
+                            // Speed
+                            VirtualKeyCode::Plus | VirtualKeyCode::NumpadAdd => {
+                                if speed < 1000. {
+                                    speed += 0.1
+                                }
+                            },
+                            VirtualKeyCode::Minus | VirtualKeyCode::NumpadSubtract => {
+                                if speed > 0.1 {
+                                    speed += 0.1
+                                }
+                            },
                             // Object Rotation
-                            glutin::event::VirtualKeyCode::R => rotations.1 = (rotations.1 + 1) % 7,
-                            glutin::event::VirtualKeyCode::Space => rotations.2 = !rotations.2,
+                            VirtualKeyCode::R => rotations.1 = (rotations.1 + 1) % 7,
+                            VirtualKeyCode::Space => rotations.2 = !rotations.2,
                             // Object Translation
-                            glutin::event::VirtualKeyCode::Right => object[0] += speed,
-                            glutin::event::VirtualKeyCode::Left => object[0] -= speed,
-                            glutin::event::VirtualKeyCode::PageUp => object[1] += speed,
-                            glutin::event::VirtualKeyCode::PageDown => object[1] -= speed,
-                            glutin::event::VirtualKeyCode::Up => object[2] += speed,
-                            glutin::event::VirtualKeyCode::Down => object[2] -= speed,
+                            VirtualKeyCode::Right => object[0] += speed,
+                            VirtualKeyCode::Left => object[0] -= speed,
+                            VirtualKeyCode::PageUp => object[1] += speed,
+                            VirtualKeyCode::PageDown => object[1] -= speed,
+                            VirtualKeyCode::Up => object[2] += speed,
+                            VirtualKeyCode::Down => object[2] -= speed,
                             // Player Translation
-                            glutin::event::VirtualKeyCode::D => player[0] += speed,
-                            glutin::event::VirtualKeyCode::A => player[0] -= speed,
-                            glutin::event::VirtualKeyCode::Home => player[1] += speed,
-                            glutin::event::VirtualKeyCode::End => player[1] -= speed,
-                            glutin::event::VirtualKeyCode::W => player[2] += speed,
-                            glutin::event::VirtualKeyCode::S => player[2] -= speed,
+                            VirtualKeyCode::D => player[0] += speed,
+                            VirtualKeyCode::A => player[0] -= speed,
+                            VirtualKeyCode::Home => player[1] += speed,
+                            VirtualKeyCode::End => player[1] -= speed,
+                            VirtualKeyCode::W => player[2] += speed,
+                            VirtualKeyCode::S => player[2] -= speed,
                             // disable/enable textures
-                            glutin::event::VirtualKeyCode::T => is_textured = !is_textured,
+                            VirtualKeyCode::T => is_textured = !is_textured,
                             // change object type
-                            glutin::event::VirtualKeyCode::O => {
+                            VirtualKeyCode::O => {
                                 indices = match indices.get_primitives_type() {
                                     glium::index::PrimitiveType::TrianglesList => glium::IndexBuffer::new(
                                         &display,
@@ -243,26 +254,26 @@ fn main() {
                                 }
                             },
                             // Object Color
-                            glutin::event::VirtualKeyCode::Key1 => {
+                            VirtualKeyCode::Key1 => {
                                 color[0] += 0.1;
                                 if color[0] > 1.0 {
                                     color[0] = 0.0;
                                 }
                             }
-                            glutin::event::VirtualKeyCode::Key2 => {
+                            VirtualKeyCode::Key2 => {
                                 color[1] += 0.1;
                                 if color[1] > 1.0 {
                                     color[1] = 0.0;
                                 }
                             }
-                            glutin::event::VirtualKeyCode::Key3 => {
+                            VirtualKeyCode::Key3 => {
                                 color[2] += 0.1;
                                 if color[2] > 1.0 {
                                     color[2] = 0.0;
                                 }
                             }
                            // Center vision on object
-                            glutin::event::VirtualKeyCode::C => {
+                            VirtualKeyCode::C => {
                                 player[3] = (object[0] + center[0]) - player[0];
                                 player[4] = (object[1] + center[1]) - player[1];
                                 player[5] = (object[2] + center[2]) - player[2];
