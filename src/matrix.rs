@@ -58,6 +58,16 @@ impl Matrix {
             w: [0.0, 0.0, 0.0, 1.0],
         }
     }
+
+    pub fn translate(&self, by: [f32; 3]) -> Self {
+        Matrix {
+            x: self.x,
+            y: self.y,
+            z: self.z,
+            w: [self.w[0] + by[0], self.w[1] + by[1], self.w[2] + by[2], 1.],
+        }
+    }
+
     pub fn multiply(&self, by: &Self) -> Self {
         Matrix {
             x: [
@@ -85,9 +95,5 @@ impl Matrix {
                 self.w[0] * by.x[3] + self.w[1] * by.y[3] + self.w[2] * by.z[3] + self.w[3] * by.w[3],
             ],
         }
-    }
-
-    pub fn set_w(&mut self, to: [f32; 3]) {
-        self.w = [to[0], to[1], to[2], 1.];
     }
 }

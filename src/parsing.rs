@@ -26,68 +26,64 @@ pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<u16>, [f32; 3]), String>
     let mut indices = Vec::new();
     let lines: Vec<&str> = obj.split('\n').collect();
     for line in lines.iter() {
-        match line.chars().next() {
-            Some(c) => {
-                match c {
-                    'v' => {
-                        let pos: Vec<Option<f32>> = line.split(' ').filter(|p| !p.is_empty()).map(|x| {
-                            match x.parse::<f32>() {
-                                Ok(res) => Some(res),
-                                Err(_) => None,
-                            }
-                        }).collect();
-                        if pos.len() == 4 {
-                            let mut i = 1;
-                            while i < pos.len() - 1 {
-                                match pos.get(i) {
-                                    Some(x) => {
-                                        if *x == None {
-                                            return Err("Vertex value must be float".to_string());
-                                        }
-                                    }
-                                    _ => ()
-                                }
-                                i += 1;
-                            }
-                            vertices.push(Vertex {position: (pos[1].unwrap(), pos[2].unwrap(), pos[3].unwrap()), tex_coords: [0.0, 0.0]});
-                        } else {
-                            return Err("Your vertex must be composed of 3 points".to_string());
-                        }
-                    },
-                    'f' => {
-                        for (i, x) in line.split(' ').collect::<Vec<&str>>().iter().enumerate() {
-                            if i >= 1 {
-                                    match x.parse::<u16>() {
-                                        Ok(nb) => indices.push(nb),
-                                        Err(_) => {
-                                            return Err("indices value must be an u16 number".to_string())
-                                        }
-                                    }
-                            }
-                            if i == 4 {
-                                let x_3 = indices.pop().unwrap();
-                                let x_1 = indices[indices.len() - 1];
-                                let x_2 = indices[indices.len() - 3];
-                                indices.push(x_1);
-                                indices.push(x_2);
-                                indices.push(x_3);
-                            }
-                        }
-                    },
-                    _ => ()
+        let chunk = line.split(' ').map(|ch| ch.trim()).filter(|ch| !ch.is_empty()).collect::<Vec<&str>>();
+        let mut chunk_iter = chunk.into_iter();
+        match chunk_iter.next() {
+            // vertices
+            Some("v") => {
+                let pos: Vec<f32> = chunk_iter.fold(Ok(Vec::new()), |acc: Result<Vec<f32>, String>, x| {
+                    match acc {
+                        Ok(mut acc) => {
+                            acc.push(x.parse::<f32>().map_err(|_| format!("Vertex value must be float {x:?}"))?);
+                            Ok(acc)
+                        },
+                        _ => acc
+                    }
+                })?;
+                vertices.push(Vertex {
+                    position: (
+                        *pos.get(0).ok_or(String::from("Your vertex must be composed of 3 points"))?,
+                        *pos.get(1).ok_or(String::from("Your vertex must be composed of 3 points"))?,
+                        *pos.get(2).ok_or(String::from("Your vertex must be composed of 3 points"))?
+                    ),
+                    tex_coords: [0.0, 0.0]
+                });
+                
+            },
+            // Texture
+            Some("vt") => {}
+            // Normal
+            Some("vn") => {}
+            // faces
+            Some("f") => {
+                for (i, chunk) in chunk_iter.enumerate() {
+                    //TODO handle Vertice/Texture/Normal
+                    let x: Vec<&str> = chunk.split('/').collect();
+                    indices.push(x.get(0).ok_or(String::from("No indive given"))?.parse::<u16>().map_err(|_| format!("indices value must be an u16 number {x:?}"))?);
+                    if i == 3 {
+                        let x_3 = indices.pop().unwrap();
+                        let x_1 = indices[indices.len() - 1];
+                        let x_2 = indices[indices.len() - 3];
+                        indices.push(x_1);
+                        indices.push(x_2);
+                        indices.push(x_3);
+                    }
+
                 }
             },
-            None => ()
+            _ => {}
         }
     }
+
+    // define distance between origin and object's center
     let mut iter = vertices.iter();
     iter.next();
     let mut center = [0., 0., 0.];
-    if let Some(fst) = iter.next() {
+        if let Some(fst) = iter.next() {
         let image_bounds = iter.fold([fst.position.0, fst.position.1, fst.position.0, fst.position.1, fst.position.2, fst.position.2], |acc, v| [min(acc[0], v.position.0), max(acc[1], v.position.1), max(acc[2], v.position.0), min(acc[3], v.position.1), min(acc[4], v.position.2), max(acc[5], v.position.2)]);
-        let size_x = image_bounds[2] - image_bounds[0];
         let size_y = image_bounds[1] - image_bounds[3];
         let size_z = image_bounds[5] - image_bounds[4];
+        let size_x = image_bounds[2] - image_bounds[0];
         center = [size_x / 2.0 + image_bounds[0], size_y / 2.0 + image_bounds[3], size_z / 2.0 + image_bounds[4]];
 
         vertices.iter_mut().for_each(|v| {

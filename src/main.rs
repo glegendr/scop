@@ -58,7 +58,7 @@ fn main() {
         println!("add an obj file in argument");
         process::exit(1);
     }
-    let (vertices, indices, center) = match fs::read_to_string(args[1].clone()) {
+    let (vertices, indices_parsing, center) = match fs::read_to_string(args[1].clone()) {
         Ok(contents) => {
             match parsing(contents) {
                 Ok(x) => x,
@@ -81,10 +81,10 @@ fn main() {
 
     let positions = glium::VertexBuffer::new(&display, &vertices).unwrap();
     //let normals = glium::VertexBuffer::new(&display, &teapot::NORMALS).unwrap();
-    let indices = glium::IndexBuffer::new(
+    let mut indices = glium::IndexBuffer::new(
         &display,
         glium::index::PrimitiveType::TrianglesList,
-        &indices,
+        &indices_parsing,
     )
     .unwrap();
 
@@ -104,8 +104,8 @@ fn main() {
     let texture = glium::texture::SrgbTexture2d::new(&display, image).unwrap(); 
 
     let mut rotations: (f32, usize, bool) = (0.0, 0, true);
-    let mut object: [f32; 3] = [0.0, 0.0, 2.5];
-    let mut player: [f32; 6] = [0.0, 0.0, 0.0, 0.0, 0.0, 2.5];
+    let mut object: [f32; 3] = [-center[0], -center[1], -center[2]];
+    let mut player: [f32; 6] = [0.0, 0.0, -5., 0.0, 0.0, 1.];
     let mut last_mouse_position: [f64; 2] = [0.0, 0.0];
     let mut color: [f32; 3] = [0.0, 0.0, 0.0];
     let speed: f32 = 0.05;
@@ -137,8 +137,8 @@ fn main() {
                     .multiply(&Matrix::from_rotation_x(rotations.0))
                     .multiply(&Matrix::from_rotation_z(rotations.0)),
         };
-        m.multiply(&Matrix::from_translation(center));
-        m.set_w([object[0], object[1], object[2]]);
+        m = m.multiply(&Matrix::from_translation(center))
+            .translate([object[0], object[1], object[2]]);
 
         let view = view_matrix(&[player[0], player[1], player[2]], &[player[3], player[4], player[5]], &[0.0, 1.0, 0.0]);
 
@@ -209,6 +209,23 @@ fn main() {
                             glutin::event::VirtualKeyCode::End => player[1] -= speed,
                             glutin::event::VirtualKeyCode::W => player[2] += speed,
                             glutin::event::VirtualKeyCode::S => player[2] -= speed,
+                            // change object type
+                            glutin::event::VirtualKeyCode::O => {
+                                indices = match indices.get_primitives_type() {
+                                    glium::index::PrimitiveType::TrianglesList => glium::IndexBuffer::new(
+                                        &display,
+                                        glium::index::PrimitiveType::LinesList,
+                                        &indices_parsing,
+                                    )
+                                    .unwrap(),
+                                    _ => glium::IndexBuffer::new(
+                                        &display,
+                                        glium::index::PrimitiveType::TrianglesList,
+                                        &indices_parsing,
+                                    )
+                                    .unwrap()
+                                }
+                            },
                             // Object Color
                             glutin::event::VirtualKeyCode::Key1 => {
                                 color[0] += 0.1;
@@ -230,9 +247,9 @@ fn main() {
                             }
                            // Center vision on object
                             glutin::event::VirtualKeyCode::C => {
-                                player[3] = object[0] - player[0];
-                                player[4] = object[1] - player[1];
-                                player[5] = object[2] - player[2];
+                                player[3] = (object[0] + center[0]) - player[0];
+                                player[4] = (object[1] + center[1]) - player[1];
+                                player[5] = (object[2] + center[2]) - player[2];
                             }
                             _ => return,
                         }
