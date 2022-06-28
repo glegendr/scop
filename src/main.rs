@@ -5,19 +5,25 @@ extern crate glam;
 
 mod parsing;
 mod matrix;
+mod event;
 
 use std::{env, fs, process};
+use event::match_event_keyboard;
 use parsing::parsing;
 use matrix::Matrix;
 use std::io::Cursor;
+use glium::{glutin, Surface, glutin::event::VirtualKeyCode};
 
 const VERTEX_SHADER: &str = r#"
     #version 150
 
     in vec3 position;
-    out vec3 my_attr;
     in vec2 tex_coords;
+    in vec3 normal;
+
     out vec2 v_tex_coords;
+    out vec3 v_normal;
+    out vec3 v_position;
 
     uniform mat4 perspective;
     uniform mat4 view;
@@ -25,45 +31,67 @@ const VERTEX_SHADER: &str = r#"
 
     void main() {
         v_tex_coords = tex_coords;
-        my_attr = position;
-        // mat4 modeltransformed = transformmodel * ;
         mat4 modelview = view * model;
+        v_normal = transpose(inverse(mat3(modelview))) * normal;
         gl_Position = perspective * modelview * vec4(position, 1.0);
+        v_position = gl_Position.xyz / gl_Position.w;
     }
 "#;
 
 const FRAGMENT_SHADER: &str = r#"
     #version 150
 
-    in vec3 my_attr;
-    out vec4 color;
-    uniform vec3 u_light;
-    uniform vec3 u_color;
-    uniform bool is_textured;
-
+    in vec3 v_normal;
     in vec2 v_tex_coords;
+    in vec3 v_position;
+
+    out vec4 color;
+
+    uniform vec3 u_light;
+    uniform bool is_textured;
+    uniform bool is_enlightened;
     uniform sampler2D tex;
 
+    vec4 get_enlightened_color(vec4 base_color, float strength) {
+        float diffuse = max(dot(normalize(v_normal), normalize(u_light)), 0.0);
+        vec3 camera_dir = normalize(-v_position);
+        vec3 half_direction = normalize(normalize(u_light) + camera_dir);
+        float specular = pow(max(dot(half_direction, normalize(v_normal)), 0.0), 16.0);
+    
+        vec3 dark_color = vec3(base_color[0] - strength, base_color[1] - strength, base_color[2] - strength);
+        vec3 regular_color = vec3(base_color[0], base_color[1], base_color[2]);
+        vec3 specular_color = vec3(base_color[0] + strength, base_color[1] + strength, base_color[2] + strength);
+        return vec4(dark_color + diffuse * regular_color + specular * specular_color, 1.0);
+    }
+
     void main() {
+        vec4 raw_color;
+        float strength;
+
         if (is_textured) {
-            color = texture(tex, v_tex_coords);
+            raw_color = texture(tex, v_tex_coords);
+            strength = 0.4;
         } else {
             float grey = (float((gl_PrimitiveID) % 5) / 10.) * 0.4 + 0.02;
-            color = vec4(grey, grey, grey, 1.0);
+            raw_color = vec4(grey, grey, grey, 1.0);
+            strength = 0.02;
+        }
+
+        if (is_enlightened) {
+            color = get_enlightened_color(raw_color, strength);
+        } else {
+            color = raw_color;
         }
     }
 "#;
 
 fn main() {
-    #[allow(unused_imports)]
-    use glium::{glutin, Surface, glutin::event::VirtualKeyCode};
-
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         println!("add an obj file in argument");
         process::exit(1);
     }
-    let (vertices, indices_parsing, center) = match fs::read_to_string(args[1].clone()) {
+    let (vertices, normals, indices_parsing, center) = match fs::read_to_string(args[1].clone()) {
         Ok(contents) => {
             match parsing(contents) {
                 Ok(x) => x,
@@ -85,7 +113,7 @@ fn main() {
     let display = glium::Display::new(wb, cb, &event_loop).unwrap();
 
     let positions = glium::VertexBuffer::new(&display, &vertices).unwrap();
-    //let normals = glium::VertexBuffer::new(&display, &teapot::NORMALS).unwrap();
+    let normals = glium::VertexBuffer::new(&display, &normals).unwrap();
     let mut indices = glium::IndexBuffer::new(
         &display,
         glium::index::PrimitiveType::TrianglesList,
@@ -112,9 +140,9 @@ fn main() {
     let mut object: [f32; 3] = [-center[0], -center[1], -center[2]];
     let mut player: [f32; 6] = [0.0, 0.0, -5., 0.0, 0.0, 1.];
     let mut last_mouse_position: [f64; 2] = [0.0, 0.0];
-    let mut color: [f32; 3] = [0.0, 0.0, 0.0];
     let mut is_textured: bool = false;
-    let mut speed: f32 = 0.05;
+    let mut is_enlightened: bool = false;
+    let mut speed: f32 = 0.1;
 
     event_loop.run(move |event, _, control_flow| {
         let next_frame_time =
@@ -128,22 +156,9 @@ fn main() {
         let mut target = display.draw();
         target.clear_color_and_depth((0.0, 0.0, 1.0, 1.0), 1.0);
 
-        let mut m = Matrix::from_translation([-center[0], -center[1], -center[2]]);
-        m = match rotations.1 {
-            0 => m.multiply(&Matrix::from_rotation_y(rotations.0)),
-            1 => m.multiply(&Matrix::from_rotation_x(rotations.0)),
-            2 => m.multiply(&Matrix::from_rotation_z(rotations.0)),
-            3 => m.multiply(&Matrix::from_rotation_x(rotations.0))
-                    .multiply(&Matrix::from_rotation_y(rotations.0)),
-            4 => m.multiply(&Matrix::from_rotation_z(rotations.0))
-                    .multiply(&Matrix::from_rotation_y(rotations.0)),
-            5 => m.multiply(&Matrix::from_rotation_z(rotations.0))
-                    .multiply(&Matrix::from_rotation_x(rotations.0)),
-            _ => m.multiply(&Matrix::from_rotation_y(rotations.0))
-                    .multiply(&Matrix::from_rotation_x(rotations.0))
-                    .multiply(&Matrix::from_rotation_z(rotations.0)),
-        };
-        m = m.multiply(&Matrix::from_translation(center))
+        let model = Matrix::from_translation([-center[0], -center[1], -center[2]])
+            .rotate(rotations.1, rotations.0)
+            .multiply(&Matrix::from_translation(center))
             .translate([object[0], object[1], object[2]]);
 
         let view = view_matrix(&[player[0], player[1], player[2]], &[player[3], player[4], player[5]], &[0.0, 1.0, 0.0]);
@@ -179,17 +194,17 @@ fn main() {
 
         target
             .draw(
-                &positions,
+                (&positions, &normals),
                 &indices,
                 &program,
                 &uniform! {
-                    model: m.to_cols_array_2d(),
+                    model: model.to_cols_array_2d(),
                     view: view,
                     perspective: perspective,
                     u_light: light,
-                    u_color: color,
                     tex: &texture,
                     is_textured: is_textured,
+                    is_enlightened: is_enlightened,
                 },
                 &params,
             )
@@ -205,37 +220,6 @@ fn main() {
                 glutin::event::WindowEvent::KeyboardInput { input, .. } => if let Some(key) = input.virtual_keycode {
                     if input.state == glutin::event::ElementState::Pressed {
                         match key {
-                            VirtualKeyCode::Escape => *control_flow = glutin::event_loop::ControlFlow::Exit,
-                            // Speed
-                            VirtualKeyCode::Plus | VirtualKeyCode::NumpadAdd => {
-                                if speed < 1000. {
-                                    speed += 0.1
-                                }
-                            },
-                            VirtualKeyCode::Minus | VirtualKeyCode::NumpadSubtract => {
-                                if speed > 0.1 {
-                                    speed += 0.1
-                                }
-                            },
-                            // Object Rotation
-                            VirtualKeyCode::R => rotations.1 = (rotations.1 + 1) % 7,
-                            VirtualKeyCode::Space => rotations.2 = !rotations.2,
-                            // Object Translation
-                            VirtualKeyCode::Right => object[0] += speed,
-                            VirtualKeyCode::Left => object[0] -= speed,
-                            VirtualKeyCode::PageUp => object[1] += speed,
-                            VirtualKeyCode::PageDown => object[1] -= speed,
-                            VirtualKeyCode::Up => object[2] += speed,
-                            VirtualKeyCode::Down => object[2] -= speed,
-                            // Player Translation
-                            VirtualKeyCode::D => player[0] += speed,
-                            VirtualKeyCode::A => player[0] -= speed,
-                            VirtualKeyCode::Home => player[1] += speed,
-                            VirtualKeyCode::End => player[1] -= speed,
-                            VirtualKeyCode::W => player[2] += speed,
-                            VirtualKeyCode::S => player[2] -= speed,
-                            // disable/enable textures
-                            VirtualKeyCode::T => is_textured = !is_textured,
                             // change object type
                             VirtualKeyCode::O => {
                                 indices = match indices.get_primitives_type() {
@@ -253,32 +237,17 @@ fn main() {
                                     .unwrap()
                                 }
                             },
-                            // Object Color
-                            VirtualKeyCode::Key1 => {
-                                color[0] += 0.1;
-                                if color[0] > 1.0 {
-                                    color[0] = 0.0;
-                                }
-                            }
-                            VirtualKeyCode::Key2 => {
-                                color[1] += 0.1;
-                                if color[1] > 1.0 {
-                                    color[1] = 0.0;
-                                }
-                            }
-                            VirtualKeyCode::Key3 => {
-                                color[2] += 0.1;
-                                if color[2] > 1.0 {
-                                    color[2] = 0.0;
-                                }
-                            }
-                           // Center vision on object
-                            VirtualKeyCode::C => {
-                                player[3] = (object[0] + center[0]) - player[0];
-                                player[4] = (object[1] + center[1]) - player[1];
-                                player[5] = (object[2] + center[2]) - player[2];
-                            }
-                            _ => return,
+                            _ => match_event_keyboard(
+                                key,
+                                control_flow,
+                                &mut speed,
+                                &mut object,
+                                &mut player,
+                                &mut rotations,
+                                &mut is_textured,
+                                &mut is_enlightened,
+                                &center
+                            )
                         }
 
                     }

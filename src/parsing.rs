@@ -21,39 +21,52 @@ pub struct Vertex {
 
 implement_vertex!(Vertex, position, tex_coords);
 
-pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<u16>, [f32; 3]), String> {
+#[derive(Copy, Clone)]
+pub struct Normal {
+    normal: (f32, f32, f32)
+}
+
+implement_vertex!(Normal, normal);
+
+
+pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<Normal>, Vec<u16>, [f32; 3]), String> {
     let mut vertices = vec![Vertex {position: (0.0, 0.0, 0.0), tex_coords: [0.0, 0.0]}];
+    let mut normals = vec![Normal {normal: (0.0, 0.0, 0.0)}];
     let mut indices = Vec::new();
     let lines: Vec<&str> = obj.split('\n').collect();
     for line in lines.iter() {
         let chunk = line.split(' ').map(|ch| ch.trim()).filter(|ch| !ch.is_empty()).collect::<Vec<&str>>();
         let mut chunk_iter = chunk.into_iter();
         match chunk_iter.next() {
-            // vertices
-            Some("v") => {
+            // vertices and normal
+            v@(Some("v") | Some("vn")) => {
                 let pos: Vec<f32> = chunk_iter.fold(Ok(Vec::new()), |acc: Result<Vec<f32>, String>, x| {
                     match acc {
                         Ok(mut acc) => {
-                            acc.push(x.parse::<f32>().map_err(|_| format!("Vertex value must be float {x:?}"))?);
+                            acc.push(x.parse::<f32>().map_err(|_| format!("Vertex/Normal value must be float {x:?}"))?);
                             Ok(acc)
                         },
                         _ => acc
                     }
                 })?;
-                vertices.push(Vertex {
-                    position: (
-                        *pos.get(0).ok_or(String::from("Your vertex must be composed of 3 points"))?,
-                        *pos.get(1).ok_or(String::from("Your vertex must be composed of 3 points"))?,
-                        *pos.get(2).ok_or(String::from("Your vertex must be composed of 3 points"))?
-                    ),
-                    tex_coords: [0.0, 0.0]
-                });
-                
+                let pos = (
+                    *pos.get(0).ok_or(String::from("Your vertex/normal must be composed of 3 points"))?,
+                    *pos.get(1).ok_or(String::from("Your vertex/normal must be composed of 3 points"))?,
+                    *pos.get(2).ok_or(String::from("Your vertex/normal must be composed of 3 points"))?
+                );
+                if let Some("v") = v {
+                    vertices.push(Vertex {
+                        position: pos,
+                        tex_coords: [0.0, 0.0]
+                    });
+                } else {
+                    normals.push(Normal {
+                        normal: pos
+                    })
+                }
             },
             // Texture
             Some("vt") => {}
-            // Normal
-            Some("vn") => {}
             // faces
             Some("f") => {
                 for (i, chunk) in chunk_iter.enumerate() {
@@ -104,5 +117,5 @@ pub fn parsing(obj: String) -> Result<(Vec<Vertex>, Vec<u16>, [f32; 3]), String>
         });
 
     }
-    Ok((vertices, indices, center))
+    Ok((vertices, normals, indices, center))
 }

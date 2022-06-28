@@ -96,4 +96,22 @@ impl Matrix {
             ],
         }
     }
+
+    pub fn rotate(&self, rotation_id: usize, angle: f32) -> Self {
+        match rotation_id {
+            0 => self.multiply(&Matrix::from_rotation_y(angle)),
+            1 => self.multiply(&Matrix::from_rotation_x(angle)),
+            2 => self.multiply(&Matrix::from_rotation_z(angle)),
+            3 => self.multiply(&Matrix::from_rotation_x(angle))
+                    .multiply(&Matrix::from_rotation_y(angle)),
+            4 => self.multiply(&Matrix::from_rotation_z(angle))
+                    .multiply(&Matrix::from_rotation_y(angle)),
+            5 => self.multiply(&Matrix::from_rotation_z(angle))
+                    .multiply(&Matrix::from_rotation_x(angle)),
+            _ => self.multiply(&Matrix::from_rotation_y(angle))
+                    .multiply(&Matrix::from_rotation_x(angle))
+                    .multiply(&Matrix::from_rotation_z(angle)),
+        }
+
+    }
 }
