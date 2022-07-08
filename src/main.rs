@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate glium;
 extern crate image;
-extern crate glam;
 
 mod parsing;
 mod matrix;
